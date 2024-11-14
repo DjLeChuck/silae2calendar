@@ -15,8 +15,9 @@ type CurrentCollaborator struct {
 }
 
 type UserData struct {
-	Firstname           string              `json:"firstname"`
-	Lastname            string              `json:"lastname"`
+	Firstname           string `json:"firstname"`
+	Lastname            string `json:"lastname"`
+	Trigram             string
 	Token               string              `json:"token"`
 	RefreshToken        string              `json:"refresh_token"`
 	CurrentCollaborator CurrentCollaborator `json:"current_collaborator_base"`

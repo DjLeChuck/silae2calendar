@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -57,10 +58,12 @@ func GetUserData(username, password string) (*UserData, error) {
 		return nil, errors.New("can not log to Silae API")
 	}
 
+	setTrigram(&apiResp.Data)
+
 	return &apiResp.Data, nil
 }
 
-func GetFreedays(userData *UserData) (*FreedaysData, error) {
+func GetFreedays(ud *UserData) (*FreedaysData, error) {
 	currentDate := time.Now().UTC().Truncate(24 * time.Hour)
 	nextMonthDate := currentDate.AddDate(0, 1, 0)
 	payload := RequestPayload{
@@ -79,7 +82,7 @@ func GetFreedays(userData *UserData) (*FreedaysData, error) {
 				Name: "company_id",
 				Criteria: StringValueCriteria{
 					Type:  "StringValue",
-					Value: userData.CurrentCollaborator.Company.Id,
+					Value: ud.CurrentCollaborator.Company.Id,
 				},
 			},
 			{
@@ -87,7 +90,7 @@ func GetFreedays(userData *UserData) (*FreedaysData, error) {
 				Name: "collaborator_ids",
 				Criteria: ListStringValueCriteria{
 					Type:   "ListStringValue",
-					Values: []int{userData.CurrentCollaborator.Id},
+					Values: []int{ud.CurrentCollaborator.Id},
 				},
 			},
 		},
@@ -110,7 +113,7 @@ func GetFreedays(userData *UserData) (*FreedaysData, error) {
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+userData.Token)
+	req.Header.Set("Authorization", "Bearer "+ud.Token)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -139,4 +142,17 @@ func GetFreedays(userData *UserData) (*FreedaysData, error) {
 	}
 
 	return &apiResp.Data, nil
+}
+
+func setTrigram(ud *UserData) {
+	trigram := strings.ToUpper(string(ud.Firstname[0]))
+	lastNameParts := strings.Fields(ud.Lastname)
+
+	if len(lastNameParts) == 1 {
+		trigram += strings.ToUpper(lastNameParts[0][:2])
+	} else {
+		trigram += strings.ToUpper(string(lastNameParts[0][0])) + strings.ToUpper(string(lastNameParts[1][0]))
+	}
+
+	ud.Trigram = trigram
 }
