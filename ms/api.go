@@ -171,3 +171,47 @@ func obtainAccessToken(code string, isRefreshToken bool) (string, error) {
 
 	return tokenResp.AccessToken, nil
 }
+
+func FindOutlookEvent(accessToken, subject, startDate, endDate string) (bool, error) {
+	eventUrl := fmt.Sprintf(
+		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$filter=subject%%20eq%%20'%s'",
+		startDate, endDate, url.QueryEscape(subject),
+	)
+	fmt.Println(eventUrl)
+	req, err := http.NewRequest("GET", eventUrl, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, errors.New("bad API HTTP status: " + resp.Status)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	fmt.Println(result)
+	events, exists := result["value"].([]interface{})
+	if !exists {
+		return false, nil
+	}
+
+	for _, event := range events {
+		eventData := event.(map[string]interface{})
+		fmt.Println(eventData)
+		if eventData["subject"] == subject {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}

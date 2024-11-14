@@ -16,12 +16,20 @@ func main() {
 		panic(err)
 	}
 
-	userData, err := silae.GetUserData(viper.GetString("silae_username"), viper.GetString("silae_password"))
+	// Connect Silae
+	ud, err := silae.GetUserData(viper.GetString("silae_username"), viper.GetString("silae_password"))
 	if err != nil {
 		panic(err)
 	}
 
-	freedays, err := silae.GetFreedays(userData)
+	// Connect Microsoft
+	accessToken, err := ms.GetAccessToken()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(accessToken)
+
+	freedays, err := silae.GetFreedays(ud)
 	if err != nil {
 		panic(err)
 	}
@@ -29,12 +37,14 @@ func main() {
 	for _, cf := range freedays.CollaboratorFreedays {
 		for _, f := range cf.Freedays {
 			fmt.Println(f)
-		}
-	}
 
-	accessToken, err := ms.GetAccessToken()
-	if err != nil {
-		panic(err)
+			exists, err := ms.FindOutlookEvent(accessToken, f.Abbr+" "+ud.Trigram, f.DateStart, f.DateEnd)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Println(exists)
+		}
 	}
 
 	err = ms.CreateOutlookEvent(accessToken)
