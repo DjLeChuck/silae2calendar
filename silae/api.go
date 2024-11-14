@@ -3,6 +3,7 @@ package silae
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -13,18 +14,18 @@ type credentials struct {
 	Password string `json:"password"`
 }
 
-func GetUserData(username, password string) UserData {
+func GetUserData(username, password string) (*UserData, error) {
 	payload, err := json.Marshal(credentials{
 		Username: username,
 		Password: password,
 	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", "https://rh.silae.fr/auth-api/login", bytes.NewBuffer(payload))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -33,33 +34,33 @@ func GetUserData(username, password string) UserData {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		panic("bad API HTTP status: " + resp.Status)
+		return nil, errors.New("bad API HTTP status: " + resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	var apiResp ApiResponse[UserData]
 	err = json.Unmarshal(body, &apiResp)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if apiResp.Status != "ok" {
-		panic("can not log to Silae API")
+		return nil, errors.New("can not log to Silae API")
 	}
 
-	return apiResp.Data
+	return &apiResp.Data, nil
 }
 
-func GetFreedays(userData UserData) FreedaysData {
+func GetFreedays(userData *UserData) (*FreedaysData, error) {
 	currentDate := time.Now().UTC().Truncate(24 * time.Hour)
 	nextMonthDate := currentDate.AddDate(0, 1, 0)
 	payload := RequestPayload{
@@ -99,12 +100,12 @@ func GetFreedays(userData UserData) FreedaysData {
 	}
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", "https://rh.silae.fr/api/V1/collaborators/freedays", bytes.NewBuffer(jsonData))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -114,28 +115,28 @@ func GetFreedays(userData UserData) FreedaysData {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		panic("bad API HTTP status: " + resp.Status)
+		return nil, errors.New("bad API HTTP status: " + resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	var apiResp ApiResponse[FreedaysData]
 	err = json.Unmarshal(body, &apiResp)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if apiResp.Status != "ok" {
-		panic("can not get freedays from Silae API")
+		return nil, errors.New("can not get freedays from Silae API")
 	}
 
-	return apiResp.Data
+	return &apiResp.Data, nil
 }
