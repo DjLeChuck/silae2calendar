@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -18,64 +20,33 @@ const (
 )
 
 func GetAccessToken() (string, error) {
-	scope := "offline_access User.Read Calendars.ReadWrite"
-	deviceCodeURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/devicecode?mkt=fr-FR", tenantID)
-	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenantID)
-
-	// 1. Demande du code d’appareil
-	resp, err := http.PostForm(deviceCodeURL, map[string][]string{
-		"client_id": {clientID},
-		"scope":     {scope},
-	})
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	// 1. Utilisation du refresh_token si possible
+	refreshToken := viper.GetString("ms.refresh_token")
+	if refreshToken != "" {
+		token, err := obtainAccessToken(refreshToken, true)
+		if token != "" && err == nil {
+			return token, nil
+		}
 	}
 
-	var deviceCodeResp DeviceCodeResp
-	if err := json.Unmarshal(body, &deviceCodeResp); err != nil {
+	// 2. Demande du code d’appareil
+	deviceCodeResp, err := obtainDeviceCode()
+	if err != nil {
 		return "", err
 	}
 
 	fmt.Println(deviceCodeResp.Message)
 
-	// 2. Polling pour le token d’accès
+	// 3. Polling pour le token d’accès
 	for {
 		time.Sleep(time.Duration(deviceCodeResp.Interval) * time.Second)
 
-		data := url.Values{}
-		data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-		data.Set("client_id", clientID)
-		data.Set("device_code", deviceCodeResp.DeviceCode)
-
-		req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data.Encode()))
+		token, err := obtainAccessToken(deviceCodeResp.DeviceCode, false)
+		if token != "" {
+			return token, nil
+		}
 		if err != nil {
 			return "", err
-		}
-
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		body, _ := io.ReadAll(resp.Body)
-
-		if resp.StatusCode == http.StatusOK {
-			var tokenResp TokenResponse
-			if err := json.Unmarshal(body, &tokenResp); err != nil {
-				return "", err
-			}
-
-			return tokenResp.AccessToken, nil
 		}
 
 		fmt.Println("En attente de l’authentification de l’utilisateur... Veuillez continuer sur votre navigateur.")
@@ -116,8 +87,7 @@ func CreateOutlookEvent(accessToken string) error {
 	}
 	defer resp.Body.Close()
 
-	_, err = io.ReadAll(resp.Body)
-	if err != nil {
+	if _, err = io.ReadAll(resp.Body); err != nil {
 		return err
 	}
 
@@ -127,4 +97,77 @@ func CreateOutlookEvent(accessToken string) error {
 
 	fmt.Println("Événement créé avec succès")
 	return nil
+}
+
+func obtainDeviceCode() (*DeviceCodeResp, error) {
+	deviceCodeURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/devicecode?mkt=fr-FR", tenantID)
+	resp, err := http.PostForm(deviceCodeURL, map[string][]string{
+		"client_id": {clientID},
+		"scope":     {"offline_access User.Read Calendars.ReadWrite"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var deviceCodeResp DeviceCodeResp
+	if err := json.Unmarshal(body, &deviceCodeResp); err != nil {
+		return nil, err
+	}
+	return &deviceCodeResp, nil
+}
+
+func obtainAccessToken(code string, isRefreshToken bool) (string, error) {
+	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenantID)
+
+	data := url.Values{}
+	data.Set("client_id", clientID)
+
+	if isRefreshToken {
+		data.Set("grant_type", "refresh_token")
+		data.Set("refresh_token", code)
+	} else {
+		data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+		data.Set("device_code", code)
+	}
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		// Sur un mauvais statut, on ne renvoie pas d’erreur afin de laisser le polling se faire
+		return "", nil
+	}
+
+	var tokenResp TokenResponse
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", err
+	}
+
+	viper.Set("ms.access_token", tokenResp.AccessToken)
+	viper.Set("ms.refresh_token", tokenResp.RefreshToken)
+	err = viper.WriteConfig()
+	if err != nil {
+		return "", err
+	}
+
+	return tokenResp.AccessToken, nil
 }
