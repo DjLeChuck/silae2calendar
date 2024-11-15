@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 	"time"
+)
+
+const (
+	monthsToLoad = 2
 )
 
 type credentials struct {
@@ -58,14 +61,14 @@ func GetUserData(username, password string) (*UserData, error) {
 		return nil, errors.New("can not log to Silae API")
 	}
 
-	setTrigram(&apiResp.Data)
+	apiResp.Data.SetTrigram()
 
 	return &apiResp.Data, nil
 }
 
 func GetFreedays(ud *UserData) (*FreedaysData, error) {
 	currentDate := time.Now().UTC().Truncate(24 * time.Hour)
-	nextMonthDate := currentDate.AddDate(0, 1, 0)
+	nextMonthDate := currentDate.AddDate(0, monthsToLoad, 0)
 	payload := RequestPayload{
 		Filters: []Filter{
 			{
@@ -142,17 +145,4 @@ func GetFreedays(ud *UserData) (*FreedaysData, error) {
 	}
 
 	return &apiResp.Data, nil
-}
-
-func setTrigram(ud *UserData) {
-	trigram := strings.ToUpper(string(ud.Firstname[0]))
-	lastNameParts := strings.Fields(ud.Lastname)
-
-	if len(lastNameParts) == 1 {
-		trigram += strings.ToUpper(lastNameParts[0][:2])
-	} else {
-		trigram += strings.ToUpper(string(lastNameParts[0][0])) + strings.ToUpper(string(lastNameParts[1][0]))
-	}
-
-	ud.Trigram = trigram
 }

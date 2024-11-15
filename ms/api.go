@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	clientID = "9eb2aae0-c030-49a8-866b-304064770509"
-	tenantID = "9d21d004-0c5d-4069-bf84-4c799d627d43"
+	clientID        = "9eb2aae0-c030-49a8-866b-304064770509"
+	tenantID        = "9d21d004-0c5d-4069-bf84-4c799d627d43"
+	EventDateLayout = "2006-01-02T15:04:05"
 )
 
 func GetAccessToken() (string, error) {
@@ -53,19 +54,60 @@ func GetAccessToken() (string, error) {
 	}
 }
 
-func CreateOutlookEvent(accessToken string) error {
+func FindOutlookEvent(accessToken, subject, startDate, endDate string) (bool, error) {
+	eventUrl := fmt.Sprintf(
+		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$filter=subject%%20eq%%20'%s'",
+		startDate, endDate, url.QueryEscape(subject),
+	)
+
+	req, err := http.NewRequest("GET", eventUrl, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, errors.New("bad API HTTP status: " + resp.Status)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+
+	if err = json.Unmarshal(body, &result); err != nil {
+		return false, err
+	}
+
+	events, exists := result["value"].([]interface{})
+	if !exists {
+		return false, nil
+	}
+
+	return len(events) > 0, nil
+}
+
+func CreateOutlookEvent(accessToken, subject, startDate, endDate string, isAllDay bool) error {
 	eventUrl := "https://graph.microsoft.com/v1.0/me/events"
 	event := map[string]interface{}{
-		"subject": "Absence",
+		"subject": subject,
 		"start": map[string]string{
-			"dateTime": time.Now().Add(24 * time.Hour).Format("2006-01-02T15:04:05"),
-			"timeZone": "Europe/Paris",
+			"dateTime": startDate,
+			"timeZone": "Romance Standard Time",
 		},
 		"end": map[string]string{
-			"dateTime": time.Now().Add(25 * time.Hour).Format("2006-01-02T15:04:05"),
-			"timeZone": "Europe/Paris",
+			"dateTime": endDate,
+			"timeZone": "Romance Standard Time",
 		},
-		"showAs": "oof",
+		"showAs":       "oof",
+		"isReminderOn": false,
+		"isAllDay":     isAllDay,
 	}
 
 	jsonData, err := json.Marshal(event)
@@ -95,7 +137,6 @@ func CreateOutlookEvent(accessToken string) error {
 		return errors.New("bad API HTTP status: " + resp.Status)
 	}
 
-	fmt.Println("Événement créé avec succès")
 	return nil
 }
 
@@ -170,48 +211,4 @@ func obtainAccessToken(code string, isRefreshToken bool) (string, error) {
 	}
 
 	return tokenResp.AccessToken, nil
-}
-
-func FindOutlookEvent(accessToken, subject, startDate, endDate string) (bool, error) {
-	eventUrl := fmt.Sprintf(
-		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$filter=subject%%20eq%%20'%s'",
-		startDate, endDate, url.QueryEscape(subject),
-	)
-	fmt.Println(eventUrl)
-	req, err := http.NewRequest("GET", eventUrl, nil)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return false, errors.New("bad API HTTP status: " + resp.Status)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	var result map[string]interface{}
-	json.Unmarshal(body, &result)
-	fmt.Println(result)
-	events, exists := result["value"].([]interface{})
-	if !exists {
-		return false, nil
-	}
-
-	for _, event := range events {
-		eventData := event.(map[string]interface{})
-		fmt.Println(eventData)
-		if eventData["subject"] == subject {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }

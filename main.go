@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
+	"sync"
 
 	"github.com/spf13/viper"
 
@@ -27,30 +27,48 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(accessToken)
 
 	freedays, err := silae.GetFreedays(ud)
 	if err != nil {
 		panic(err)
 	}
 
+	wg := sync.WaitGroup{}
+
 	for _, cf := range freedays.CollaboratorFreedays {
 		for _, f := range cf.Freedays {
-			fmt.Println(f)
+			wg.Add(1)
 
-			exists, err := ms.FindOutlookEvent(accessToken, f.Abbr+" "+ud.Trigram, f.DateStart, f.DateEnd)
-			if err != nil {
-				panic(err)
-			}
+			go func() {
+				defer wg.Done()
 
-			fmt.Println(exists)
+				dateStart, err := f.DateStartForOutlook()
+				if err != nil {
+					panic(err)
+				}
+
+				dateEnd, err := f.DateEndForOutlook()
+				if err != nil {
+					panic(err)
+				}
+
+				subject := f.Abbr + " " + ud.Trigram
+				exists, err := ms.FindOutlookEvent(accessToken, subject, dateStart, dateEnd)
+				if err != nil {
+					panic(err)
+				}
+
+				if !exists {
+					err = ms.CreateOutlookEvent(accessToken, subject, dateStart, dateEnd, f.IsAllDay())
+					if err != nil {
+						panic(err)
+					}
+				}
+			}()
 		}
 	}
 
-	err = ms.CreateOutlookEvent(accessToken)
-	if err != nil {
-		panic(err)
-	}
+	wg.Wait()
 }
 
 func loadConfig() error {
