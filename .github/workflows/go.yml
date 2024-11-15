@@ -1,0 +1,32 @@
+name: silae2calendar build
+
+on:
+    push:
+        tags:
+            - '*'
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@v4
+
+            -   name: Set up Go
+                uses: actions/setup-go@v4
+                with:
+                    go-version: '1.23'
+
+            -   name: Format and vet
+                run: make vet
+
+            -   name: Build
+                run: make build
+
+            -   name: Update release with files
+                id: create_version_release
+                uses: ncipollo/release-action@v1
+                with:
+                    name: ${{ github.event.release.name }}
+                    artifacts: './dist/*'
+                    tag: ${{ github.event.release.tag_name }}
+                    body: ${{ github.event.release.body }}
