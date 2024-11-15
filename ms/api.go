@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"silae2calendar/logger"
 )
 
 const (
@@ -21,6 +22,8 @@ const (
 )
 
 func GetAccessToken() (string, error) {
+	logger.InfoLog.Print("Getting Microsoft access token")
+
 	// 1. Utilisation du refresh_token si possible
 	refreshToken := viper.GetString("ms.refresh_token")
 	if refreshToken != "" {
@@ -55,6 +58,8 @@ func GetAccessToken() (string, error) {
 }
 
 func FindOutlookEvent(accessToken, subject, startDate, endDate string) (bool, error) {
+	logger.InfoLog.Printf("Getting Outlook event with subject \"%s\" between %s and %s", subject, startDate, endDate)
+
 	eventUrl := fmt.Sprintf(
 		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$filter=subject%%20eq%%20'%s'",
 		startDate, endDate, url.QueryEscape(subject),
@@ -94,6 +99,8 @@ func FindOutlookEvent(accessToken, subject, startDate, endDate string) (bool, er
 }
 
 func CreateOutlookEvent(accessToken, subject, startDate, endDate string, isAllDay bool) error {
+	logger.InfoLog.Printf("Creating Outlook event with subject \"%s\" between %s and %s", subject, startDate, endDate)
+
 	eventUrl := "https://graph.microsoft.com/v1.0/me/events"
 	event := map[string]interface{}{
 		"subject": subject,
@@ -141,6 +148,8 @@ func CreateOutlookEvent(accessToken, subject, startDate, endDate string, isAllDa
 }
 
 func obtainDeviceCode() (*DeviceCodeResp, error) {
+	logger.InfoLog.Printf("Obtaining device code from Microsoft")
+
 	deviceCodeURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/devicecode?mkt=fr-FR", tenantID)
 	resp, err := http.PostForm(deviceCodeURL, map[string][]string{
 		"client_id": {clientID},
@@ -164,6 +173,8 @@ func obtainDeviceCode() (*DeviceCodeResp, error) {
 }
 
 func obtainAccessToken(code string, isRefreshToken bool) (string, error) {
+	logger.InfoLog.Printf("Obtaining access token from Microsoft")
+
 	tokenURL := fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", tenantID)
 
 	data := url.Values{}

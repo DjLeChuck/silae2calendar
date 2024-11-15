@@ -7,30 +7,31 @@ import (
 
 	"github.com/spf13/viper"
 
+	"silae2calendar/logger"
 	"silae2calendar/ms"
 	"silae2calendar/silae"
 )
 
 func main() {
 	if err := loadConfig(); err != nil {
-		panic(err)
+		logger.ErrorLog.Fatal(err)
 	}
 
 	// Connect Silae
 	ud, err := silae.GetUserData(viper.GetString("silae_username"), viper.GetString("silae_password"))
 	if err != nil {
-		panic(err)
+		logger.ErrorLog.Fatal(err)
 	}
 
 	// Connect Microsoft
 	accessToken, err := ms.GetAccessToken()
 	if err != nil {
-		panic(err)
+		logger.ErrorLog.Fatal(err)
 	}
 
 	freedays, err := silae.GetFreedays(ud)
 	if err != nil {
-		panic(err)
+		logger.ErrorLog.Fatal(err)
 	}
 
 	wg := sync.WaitGroup{}
@@ -44,24 +45,24 @@ func main() {
 
 				dateStart, err := f.DateStartForOutlook()
 				if err != nil {
-					panic(err)
+					logger.ErrorLog.Fatal(err)
 				}
 
 				dateEnd, err := f.DateEndForOutlook()
 				if err != nil {
-					panic(err)
+					logger.ErrorLog.Fatal(err)
 				}
 
 				subject := f.Abbr + " " + ud.Trigram
 				exists, err := ms.FindOutlookEvent(accessToken, subject, dateStart, dateEnd)
 				if err != nil {
-					panic(err)
+					logger.ErrorLog.Fatal(err)
 				}
 
 				if !exists {
 					err = ms.CreateOutlookEvent(accessToken, subject, dateStart, dateEnd, f.IsAllDay())
 					if err != nil {
-						panic(err)
+						logger.ErrorLog.Fatal(err)
 					}
 				}
 			}()

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"silae2calendar/logger"
 )
 
 const (
@@ -19,6 +21,8 @@ type credentials struct {
 }
 
 func GetUserData(username, password string) (*UserData, error) {
+	logger.InfoLog.Print("Getting Silae user data")
+
 	payload, err := json.Marshal(credentials{
 		Username: username,
 		Password: password,
@@ -69,6 +73,9 @@ func GetUserData(username, password string) (*UserData, error) {
 func GetFreedays(ud *UserData) (*FreedaysData, error) {
 	currentDate := time.Now().UTC().Truncate(24 * time.Hour)
 	nextMonthDate := currentDate.AddDate(0, monthsToLoad, 0)
+
+	logger.InfoLog.Printf("Getting Silae freedays between %s and %s", currentDate, nextMonthDate)
+
 	payload := RequestPayload{
 		Filters: []Filter{
 			{
